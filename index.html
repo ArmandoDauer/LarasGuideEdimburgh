@@ -164,13 +164,14 @@
         dia: "dia1"
       },
       {
-        categoria: "Restaurante",
-        nome: "Mia Italian Kitchen Dalry",
-        coords: [55.94412893880504, -3.2193200695287834],
-        icone: "restaurant.png",
-        endereco: "96 Dalry Rd, Edinburgh EH11 2AX, Reino Unido",
-        descricao: "Restaurante italiano com opções sem glutem.",
-        dia: "dia1"
+        categoria: "Restaurantes",
+        nome: "Mia Italian Restaurant",
+        coords: [55.9505, -3.2030],
+        icone: "icons/restaurant.png",
+        endereco: "Dalry Road, Edinburgh",
+        descricao: "Cozinha italiana com pratos autênticos.",
+        dia: "dia2",
+        menuUrl: "https://mia-restaurant.co.uk/wp-content/uploads/2024/06/Mia-italian-restaurant-dalry-road-edinburgh-food-menu-1.2-17-June-24.pdf"
       },
       {
         categoria: "Outros",
@@ -188,11 +189,14 @@
       const icon = L.icon({iconUrl: l.icone, iconSize: [32,32]});
       const marker = L.marker(l.coords, {icon}).addTo(map);
       const urlGM = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(l.endereco)}`;
-      marker.bindPopup(`
+      // Cria o link do menu apenas se houver
+      let menuLink = l.menuUrl ? `<br><a href="${l.menuUrl}" target="_blank">📄 Menu</a>` : "";
+      l.marker.bindPopup(`
         <b>${l.nome}</b><br>
         ${l.endereco}<br>
-        ${l.descricao}<br>
-        <a href="${urlGM}" target="_blank">📍 Mandar para o Google Maps</a>
+        ${l.descricao}
+        ${menuLink}
+        <br><a href="${urlGM}" target="_blank">📍 Mandar para o Google Maps</a>
       `);
       l.marker = marker;
     });
@@ -309,6 +313,7 @@ function updateSidebar() {
   </script>
 </body>
 </html>
+
 
 
 
