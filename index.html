@@ -187,18 +187,21 @@
     // Criar marcadores
     locais.forEach(l => {
       const icon = L.icon({iconUrl: l.icone, iconSize: [32,32]});
-      const marker = L.marker(l.coords, {icon}).addTo(map);
+      const marker = L.marker(l.coords, {icon}); // cria o marcador
+    
       const urlGM = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(l.endereco)}`;
       // Cria o link do menu apenas se houver
       let menuLink = l.menuUrl ? `<br><a href="${l.menuUrl}" target="_blank">📄 Menu</a>` : "";
-      l.marker.bindPopup(`
+    
+      marker.bindPopup(`
         <b>${l.nome}</b><br>
         ${l.endereco}<br>
         ${l.descricao}
         ${menuLink}
         <br><a href="${urlGM}" target="_blank">📍 Mandar para o Google Maps</a>
       `);
-      l.marker = marker;
+    
+      l.marker = marker; // agora sim, salva o marcador no objeto
     });
 
     // Geolocalização do usuário
@@ -313,6 +316,7 @@ function updateSidebar() {
   </script>
 </body>
 </html>
+
 
 
 
