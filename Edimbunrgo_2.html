@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <title>Lara's Guide - Edimburgo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- Roteamento -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+  <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: Arial, sans-serif; }
+    #map { flex: 1; }
+
+    /* Sidebar */
+    #sidebar {
+      position: fixed;
+      top: 0;
+      right: -100%;
+      width: 80%;
+      max-width: 300px;
+      height: 100%;
+      background: #fafafa;
+      border-left: 1px solid #ddd;
+      padding: 12px;
+      overflow-y: auto;
+      transition: right 0.3s ease;
+      z-index: 1000;
+    }
+    #sidebar.open {
+      right: 0;
+    }
+    #sidebar h3 { margin-top: 0; }
+    .category { margin-top: 10px; }
+    .place { padding: 6px; border-bottom: 1px solid #eee; cursor: pointer; }
+    .place:hover { background: #f0f0f0; }
+
+    /* Botão abrir sidebar (mobile) */
+    #toggleSidebar {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: #0077ff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 16px;
+      cursor: pointer;
+      z-index: 1100;
+    }
+
+    /* Barra de botões inferior */
+    #menu {
+      display: flex;
+      justify-content: space-around;
+      background: #fff;
+      border-top: 1px solid #ddd;
+      padding: 8px;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+    }
+    #menu button {
+      flex: 1;
+      margin: 0 5px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: #f7f7f7;
+      color: #333;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    #menu button:hover { background: #e9e9e9; }
+    #menu button.active {
+      background: #0077ff;
+      color: white;
+      border-color: #0077ff;
+    }
+
+    /* Layout desktop: sidebar fixa ao lado, sem botão toggle */
+    @media (min-width: 768px) {
+      body { flex-direction: row; }
+      #map { flex: 3; }
+      #sidebar {
+        position: static;
+        width: 300px;
+        max-width: none;
+        border-left: 1px solid #ddd;
+        transition: none;
+      }
+      #toggleSidebar { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- Botão abre/fecha sidebar no mobile -->
+  <button id="toggleSidebar">☰ Locais</button>
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <h3 id="sidebar-title">Locais</h3>
+    <div id="places"></div>
+  </div>
+
+  <!-- Barra de botões -->
+  <div id="menu">
+    <button onclick="showView('home')" id="btn-home" class="active">Home</button>
+    <button onclick="showView('perto')" id="btn-perto">Perto de Mim</button>
+    <button onclick="showView('dia1')" id="btn-dia1">Dia 1</button>
+    <button onclick="showView('dia2')" id="btn-dia2">Dia 2</button>
+    <button onclick="showView('dia3')" id="btn-dia3">Dia 3</button>
+  </div>
+
+  <script>
+    const map = L.map('map').setView([55.9533, -3.1883], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    let userMarker;
+    let routingControl;
+    let currentView = "home";
+
+    // Lista de locais
+    const locais = [
+      {
+        categoria: "Supermercados",
+        nome: "Tesco Express",
+        coords: [55.9516, -3.1921],
+        icone: "https://cdn-icons-png.flaticon.com/512/3075/3075977.png",
+        endereco: "Princes St, Edinburgh",
+        descricao: "Supermercado de conveniência.",
+        dia: "dia1"
+      },
+      {
+        categoria: "Atrações",
+        nome: "Castelo de Edimburgo",
+        coords: [55.9486, -3.1999],
+        icone: "https://cdn-icons-png.flaticon.com/512/190/190633.png",
+        endereco: "Castlehill, Edinburgh EH1 2NG",
+        descricao: "Principal ponto turístico da cidade.",
+        dia: "dia1"
+      },
+      {
+        categoria: "Atrações",
+        nome: "National Museum of Scotland",
+        coords: [55.9469, -3.1904],
+        icone: "https://cdn-icons-png.flaticon.com/512/2995/2995101.png",
+        endereco: "Chambers St, Edinburgh",
+        descricao: "Museu nacional com coleções históricas.",
+        dia: "dia2"
+      },
+      {
+        categoria: "Outros",
+        nome: "Elephant House Café",
+        coords: [55.9475, -3.1900],
+        icone: "https://cdn-icons-png.flaticon.com/512/561/561169.png",
+        endereco: "21 George IV Bridge, Edinburgh",
+        descricao: "Café famoso onde J.K. Rowling escreveu parte de Harry Potter.",
+        dia: "dia3"
+      }
+    ];
+
+    // Criar marcadores
+    locais.forEach(l => {
+      const icon = L.icon({iconUrl: l.icone, iconSize: [32,32]});
+      const marker = L.marker(l.coords, {icon}).addTo(map);
+      const urlGM = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(l.endereco)}`;
+      marker.bindPopup(`
+        <b>${l.nome}</b><br>
+        ${l.endereco}<br>
+        ${l.descricao}<br>
+        <a href="${urlGM}" target="_blank">📍 Mandar para o Google Maps</a>
+      `);
+      l.marker = marker;
+    });
+
+    // Geolocalização do usuário
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        const coords = [pos.coords.latitude, pos.coords.longitude];
+        map.setView(coords, 15);
+        userMarker = L.marker(coords, {
+          icon: L.icon({
+            iconUrl:"https://cdn-icons-png.flaticon.com/512/149/149071.png",
+            iconSize:[30,30]
+          })
+        }).addTo(map).bindPopup("Você está aqui");
+
+        updateSidebar();
+      });
+    }
+
+    // Função para trocar de aba
+    function showView(view) {
+      currentView = view;
+
+      document.querySelectorAll("#menu button").forEach(btn => btn.classList.remove("active"));
+      document.getElementById("btn-" + view).classList.add("active");
+
+      updateSidebar();
+    }
+
+function updateSidebar() {
+  const placesDiv = document.getElementById("places");
+  placesDiv.innerHTML = "";
+
+  // Remove todos os marcadores do mapa
+  locais.forEach(l => { if (l.marker) map.removeLayer(l.marker); });
+
+  let locaisFiltrados = [];
+  if (currentView === "home") {
+    locaisFiltrados = locais;
+    document.getElementById("sidebar-title").innerText = "Todos os Locais";
+  }
+  else if (currentView === "perto" && userMarker) {
+    const userCoords = userMarker.getLatLng();
+    locaisFiltrados = locais.filter(l => map.distance(userCoords, l.coords) <= 500);
+    locaisFiltrados.forEach(l => l.distancia = map.distance(userCoords, l.coords));
+    document.getElementById("sidebar-title").innerText = "Locais até 500m";
+  }
+  else {
+    locaisFiltrados = locais.filter(l => l.dia === currentView);
+    document.getElementById("sidebar-title").innerText = "Roteiro " + currentView.replace("dia","Dia ");
+  }
+
+  // Agrupar por categorias
+  const categorias = {};
+  locaisFiltrados.forEach(l => {
+    if (!categorias[l.categoria]) categorias[l.categoria] = [];
+    categorias[l.categoria].push(l);
+  });
+
+  // Renderizar lista lateral e recolocar apenas os filtrados no mapa
+  for (const cat in categorias) {
+    const catDiv = document.createElement("div");
+    catDiv.classList.add("category");
+    catDiv.innerHTML = `<h4>${cat}</h4>`;
+    categorias[cat].forEach(place => {
+      const pDiv = document.createElement("div");
+      pDiv.classList.add("place");
+      let nome = place.nome;
+      if (place.distancia) {
+        const dist = place.distancia < 1000 ? 
+          `${Math.round(place.distancia)} m` : 
+          `${(place.distancia/1000).toFixed(1)} km`;
+        nome += ` (${dist})`;
+      }
+      pDiv.textContent = nome;
+      pDiv.onclick = () => {
+        focusOnPlace(place);
+        if (window.innerWidth < 768) toggleSidebar(); // fecha no mobile
+      };
+      catDiv.appendChild(pDiv);
+
+      // Adiciona apenas os filtrados ao mapa
+      place.marker.addTo(map);
+    });
+    placesDiv.appendChild(catDiv);
+  }
+}
+
+    // Focar em um local e mostrar rota
+    function focusOnPlace(place) {
+      map.setView(place.coords, 16);
+      place.marker.openPopup();
+
+      if (userMarker) {
+        if (routingControl) map.removeControl(routingControl);
+        routingControl = L.Routing.control({
+          waypoints: [
+            userMarker.getLatLng(),
+            L.latLng(place.coords)
+          ],
+          createMarker: () => null,
+          routeWhileDragging: false
+        }).addTo(map);
+      }
+    }
+
+    // Abrir/fechar sidebar no mobile
+    const sidebar = document.getElementById("sidebar");
+    document.getElementById("toggleSidebar").addEventListener("click", toggleSidebar);
+    function toggleSidebar() {
+      sidebar.classList.toggle("open");
+    }
+  </script>
+</body>
+</html>
