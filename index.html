@@ -9,10 +9,6 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-  <!-- Roteamento -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
-  <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
-
   <!-- SheetJS para ler Excel -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
@@ -64,12 +60,11 @@
     }
     .place input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
 
-    /* Botão abrir sidebar (hamburger) - canto superior direito */
+    /* Botão abrir sidebar (hamburger) */
     #toggleSidebar {
       position: fixed;
       top: 10px;
-      right: 10px;     /* canto superior direito */
-      left: auto;
+      right: 10px;
       background: var(--azul);
       color: white;
       border: none;
@@ -109,7 +104,6 @@
     #menu button:hover { background: #e9e9e9; }
     #menu button.active { background: var(--azul); color: white; border-color: var(--azul); }
 
-    /* Aviso quando não encontra locais.xlsx */
     #excelNotice {
       position: fixed;
       top: 60px;
@@ -125,17 +119,10 @@
       font-size: 14px;
     }
 
-    /* Desktop: sidebar fixa */
     @media (min-width: 768px) {
       body { flex-direction: row; }
       #map { flex: 3; }
-      #sidebar {
-        position: static;
-        width: 320px;
-        max-width: none;
-        border-left: 1px solid var(--borda);
-        transition: none;
-      }
+      #sidebar { position: static; width: 320px; max-width: none; border-left: 1px solid var(--borda); transition: none; }
       #toggleSidebar { display: none; }
       #excelNotice { top: 10px; }
     }
@@ -144,22 +131,14 @@
 <body>
   <div id="map"></div>
 
-  <!-- Botão abre/fecha sidebar (hamburger) -->
   <button id="toggleSidebar" aria-label="Abrir lista">☰ Locais</button>
+  <div id="excelNotice">⚠️ Não foi possível carregar <b>locais.xlsx</b>. Coloque o arquivo na mesma pasta.</div>
 
-  <!-- Aviso somente se não encontrar locais.xlsx -->
-  <div id="excelNotice">
-    ⚠️ Não foi possível carregar <b>locais.xlsx</b>.<br>
-    Coloque o arquivo <b>locais.xlsx</b> na mesma pasta deste HTML e recarregue a página.
-  </div>
-
-  <!-- Sidebar -->
   <div id="sidebar">
     <h3 id="sidebar-title">Locais</h3>
     <div id="places"></div>
   </div>
 
-  <!-- Barra de botões -->
   <div id="menu">
     <button onclick="showView('home')" id="btn-home" class="active">Home</button>
     <button onclick="showView('perto')" id="btn-perto">Perto de Mim</button>
@@ -169,252 +148,81 @@
   </div>
 
   <script>
-    // --- Mapa ---
     const map = L.map('map').setView([55.9533, -3.1883], 14);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
 
     let userMarker;
-    let routingControl;
     let currentView = "home";
-    let locais = []; // via locais.xlsx
+    let locais = [];
     const createdMarkers = [];
 
-    // Estado (checkbox) em localStorage
-    function placeKey(place) { return `done:${(place.nome||'').toLowerCase().trim()}::${(place.dia||'').toLowerCase().trim()}`; }
-    function isCompleted(place) { try { return localStorage.getItem(placeKey(place)) === '1'; } catch { return false; } }
-    function setCompleted(place, value) {
-      try { value ? localStorage.setItem(placeKey(place),'1') : localStorage.removeItem(placeKey(place)); } catch {}
-      if (place.marker) place.marker.setOpacity(value ? 0.35 : 1);
-    }
+    function placeKey(p){ return `done:${(p.nome||'').toLowerCase()}::${(p.dia||'').toLowerCase()}`; }
+    function isCompleted(p){ return localStorage.getItem(placeKey(p))==='1'; }
+    function setCompleted(p,v){ v?localStorage.setItem(placeKey(p),'1'):localStorage.removeItem(placeKey(p)); if(p.marker) p.marker.setOpacity(v?0.35:1); }
 
-    // Carregamento OBRIGATÓRIO de locais.xlsx (sem upload)
-    (async function loadFixedExcel(){
+    // Carrega locais.xlsx
+    (async function(){
       try {
-        const resp = await fetch('locais.xlsx', { cache: 'no-store' });
-        if (!resp.ok) throw new Error('Sem locais.xlsx');
+        const resp = await fetch('locais.xlsx',{cache:'no-store'});
+        if(!resp.ok) throw new Error();
         const ab = await resp.arrayBuffer();
-        parseExcelArrayBuffer(ab);
-      } catch (e) {
-        // Exibe aviso e não tenta mais nada
-        document.getElementById('excelNotice').style.display = 'block';
-      }
+        parseExcel(ab);
+      } catch(e){ document.getElementById('excelNotice').style.display='block'; }
     })();
 
-    // Converte "Menu" em link para o menu da página
-    function linkifyMenu(text) {
-      if (!text) return '';
-      return text.replace(/(\bmenu\b)/gi, '<a href="#menu" onclick="goToMenu(); return false;">$1</a>');
-    }
-    function goToMenu() {
-      document.getElementById('menu').scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
+    function linkifyMenu(t){ return t?t.replace(/(\bmenu\b)/gi,'<a href="#menu" onclick="goToMenu();return false;">$1</a>'):""; }
+    function goToMenu(){ document.getElementById('menu').scrollIntoView({behavior:'smooth'}); }
 
-    function parseExcelArrayBuffer(ab) {
-      const wb = XLSX.read(ab, { type: 'array' });
-      const firstSheet = wb.SheetNames[0];
-      const json = XLSX.utils.sheet_to_json(wb.Sheets[firstSheet], { defval: '' });
-
-      // Colunas esperadas: categoria, nome, latitude, longitude, icone, endereco, descricao, dia, popup_text, (opcional) ordem
-      locais = json.map((r, idx) => ({
-        categoria: r.categoria || 'Outros',
-        nome: r.nome || `Ponto ${idx+1}`,
-        coords: [Number(r.latitude) || 0, Number(r.longitude) || 0],
-        icone: r.icone || 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
-        endereco: r.endereco || '',
-        descricao: r.descricao || '',
-        dia: (r.dia || 'home').toString().trim().toLowerCase(),
-        popup_text: r.popup_text || '',
-        ordem: (r.ordem !== '' && r.ordem !== null && r.ordem !== undefined) ? Number(r.ordem) : null,
-        _rowIndex: idx
-      }));
-
-      createMarkers();
-      updateSidebar();
+    function parseExcel(ab){
+      const wb=XLSX.read(ab,{type:'array'}); const sh=wb.SheetNames[0];
+      const data=XLSX.utils.sheet_to_json(wb.Sheets[sh],{defval:''});
+      locais=data.map((r,i)=>({categoria:r.categoria||'Outros',nome:r.nome||`Ponto ${i+1}`,coords:[+r.latitude||0,+r.longitude||0],
+        icone:r.icone||'https://cdn-icons-png.flaticon.com/512/854/854878.png',endereco:r.endereco||'',descricao:r.descricao||'',
+        dia:(r.dia||'home').toLowerCase(),popup_text:r.popup_text||'',ordem:r.ordem?+r.ordem:null,_rowIndex:i}));
+      createMarkers(); updateSidebar();
     }
 
-    function createMarkers() {
-      createdMarkers.forEach(m => map.removeLayer(m));
-      createdMarkers.length = 0;
-
-      locais.forEach(l => {
-        const icon = L.icon({ iconUrl: l.icone, iconSize: [32,32] });
-        const marker = L.marker(l.coords, { icon }).addTo(map);
-
-        const urlGM = l.endereco
-          ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(l.endereco)}`
-          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nome)}`;
-
-        const popupMenuHtml = linkifyMenu(l.popup_text);
-        const popupHtml = `
-          <div style="min-width:200px">
-            <b>${l.nome}</b><br>
-            ${l.endereco ? `${l.endereco}<br>` : ""}
-            ${l.descricao ? `${l.descricao}<br>` : ""}
-            ${popupMenuHtml ? `${popupMenuHtml}<br>` : ""}
-            <a href="${urlGM}" target="_blank">📍 Mandar para o Google Maps</a>
-          </div>
-        `;
-        marker.bindPopup(popupHtml);
-
-        l.marker = marker;
-        marker.setOpacity(isCompleted(l) ? 0.35 : 1);
-
-        createdMarkers.push(marker);
+    function createMarkers(){
+      createdMarkers.forEach(m=>map.removeLayer(m)); createdMarkers.length=0;
+      locais.forEach(l=>{
+        const ic=L.icon({iconUrl:l.icone,iconSize:[32,32]});
+        const m=L.marker(l.coords,{icon:ic}).addTo(map);
+        const url=l.endereco?`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(l.endereco)}`:`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nome)}`;
+        const pop=`<b>${l.nome}</b><br>${l.endereco?l.endereco+'<br>':''}${l.descricao?l.descricao+'<br>':''}${linkifyMenu(l.popup_text)}<br>
+                   <a href="${url}" target="_blank">📍 Mandar para o Google Maps</a>`;
+        m.bindPopup(pop);
+        l.marker=m; m.setOpacity(isCompleted(l)?0.35:1); createdMarkers.push(m);
       });
     }
 
-    // Geolocalização do usuário (para "Perto de Mim" e rotas)
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(pos => {
-        const coords = [pos.coords.latitude, pos.coords.longitude];
-        map.setView(coords, 15);
-        userMarker = L.marker(coords, {
-          icon: L.icon({ iconUrl:"https://cdn-icons-png.flaticon.com/512/149/149071.png", iconSize:[30,30] })
-        }).addTo(map).bindPopup("Você está aqui");
-        updateSidebar();
-      }, () => updateSidebar());
-    } else updateSidebar();
+    if(navigator.geolocation){ navigator.geolocation.getCurrentPosition(p=>{ const c=[p.coords.latitude,p.coords.longitude]; map.setView(c,15);
+      userMarker=L.marker(c,{icon:L.icon({iconUrl:"https://cdn-icons-png.flaticon.com/512/149/149071.png",iconSize:[30,30]})}).addTo(map).bindPopup("Você está aqui");
+      updateSidebar(); },()=>updateSidebar()); } else updateSidebar();
 
-    // Troca de aba
-    function showView(view) {
-      currentView = view;
+    function showView(v){ currentView=v; document.querySelectorAll("#menu button").forEach(b=>b.classList.remove("active"));
+      const btn=document.getElementById("btn-"+v); if(btn) btn.classList.add("active"); updateSidebar(); }
 
-      document.querySelectorAll("#menu button").forEach(btn => btn.classList.remove("active"));
-      const btn = document.getElementById("btn-" + view);
-      if (btn) btn.classList.add("active");
-
-      updateSidebar();
+    function updateSidebar(){
+      const div=document.getElementById("places"); div.innerHTML="";
+      locais.forEach(l=>{if(l.marker) map.removeLayer(l.marker);});
+      let list=[]; let tit="Locais";
+      if(currentView==="home"){ list=locais; tit="Todos"; }
+      else if(currentView==="perto"&&userMarker){ list=locais.filter(l=>map.distance(userMarker.getLatLng(),l.coords)<=500); tit="Até 500m"; }
+      else if(["dia1","dia2","dia3"].includes(currentView)){ list=locais.filter(l=>l.dia===currentView); list.sort((a,b)=>(a.ordem||a._rowIndex)-(b.ordem||b._rowIndex)); tit="Roteiro "+currentView.replace("dia","Dia "); }
+      document.getElementById("sidebar-title").innerText=tit;
+      list.forEach(p=>{ if(p.marker) p.marker.addTo(map);
+        const row=document.createElement("div"); row.className="place";
+        const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=isCompleted(p);
+        cb.onchange=()=>{ setCompleted(p,cb.checked); row.classList.toggle("completed",cb.checked); };
+        const lab=document.createElement("div"); lab.className="place-label"; lab.textContent=p.nome;
+        row.append(cb,lab); row.classList.toggle("completed",cb.checked);
+        row.onclick=e=>{ if(e.target.tagName==="INPUT")return; map.setView(p.coords,16); if(p.marker) p.marker.openPopup(); if(window.innerWidth<768) toggleSidebar(); };
+        div.appendChild(row);
+      });
     }
 
-    function updateSidebar() {
-      const placesDiv = document.getElementById("places");
-      placesDiv.innerHTML = "";
-
-      if (!Array.isArray(locais) || locais.length === 0) {
-        placesDiv.innerHTML = "<p>Nenhum local carregado. Verifique o arquivo <b>locais.xlsx</b>.</p>";
-        return;
-      }
-
-      // Esconde/mostra marcadores conforme a view
-      locais.forEach(l => { if (l.marker) map.removeLayer(l.marker); });
-
-      let locaisFiltrados = [];
-      let titulo = "Locais";
-
-      if (currentView === "home") {
-        locaisFiltrados = locais;
-        titulo = "Todos os Locais";
-      } else if (currentView === "perto" && userMarker) {
-        const userCoords = userMarker.getLatLng();
-        locaisFiltrados = locais.filter(l => map.distance(userCoords, l.coords) <= 500);
-        locaisFiltrados.forEach(l => l.distancia = map.distance(userCoords, l.coords));
-        titulo = "Locais até 500m";
-      } else if (["dia1","dia2","dia3"].includes(currentView)) {
-        locaisFiltrados = locais.filter(l => (l.dia || '').toLowerCase() === currentView);
-        const anyOrdem = locaisFiltrados.some(l => typeof l.ordem === 'number' && !Number.isNaN(l.ordem));
-        if (anyOrdem) {
-          locaisFiltrados.sort((a,b) => {
-            const ao = (typeof a.ordem === 'number' && !Number.isNaN(a.ordem)) ? a.ordem : Infinity;
-            const bo = (typeof b.ordem === 'number' && !Number.isNaN(b.ordem)) ? b.ordem : Infinity;
-            return ao - bo || (a._rowIndex - b._rowIndex);
-          });
-        }
-        titulo = "Roteiro " + currentView.replace("dia","Dia ");
-      } else if (currentView === "perto") {
-        locaisFiltrados = [];
-        titulo = "Perto de Mim (habilite a localização)";
-      } else {
-        locaisFiltrados = locais;
-        titulo = "Todos os Locais";
-      }
-
-      document.getElementById("sidebar-title").innerText = titulo;
-
-      // Render da lista + recolocar marcadores
-      if (["dia1","dia2","dia3"].includes(currentView)) {
-        locaisFiltrados.forEach(place => {
-          if (place.marker) place.marker.addTo(map);
-
-          const row = document.createElement("div");
-          row.classList.add("place");
-          row.onclick = (e) => {
-            if (e.target && e.target.matches('input[type="checkbox"]')) return;
-            focusOnPlace(place);
-            if (window.innerWidth < 768) toggleSidebar();
-          };
-
-          const cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.checked = isCompleted(place);
-          cb.addEventListener("change", () => {
-            setCompleted(place, cb.checked);
-            row.classList.toggle("completed", cb.checked);
-          });
-
-          const label = document.createElement("div");
-          label.classList.add("place-label");
-          label.textContent = place.nome;
-
-          row.appendChild(cb);
-          row.appendChild(label);
-          row.classList.toggle("completed", cb.checked);
-
-          placesDiv.appendChild(row);
-        });
-      } else {
-        // Home & Perto: agrupado por categoria (ordem alfabética + nomes)
-        const categorias = {};
-        locaisFiltrados.forEach(l => { if (!categorias[l.categoria]) categorias[l.categoria] = []; categorias[l.categoria].push(l); });
-
-        Object.keys(categorias).sort((a,b)=>a.localeCompare(b)).forEach(cat => {
-          const catDiv = document.createElement("div");
-          catDiv.classList.add("category");
-          catDiv.innerHTML = `<h4>${cat}</h4>`;
-
-          categorias[cat].sort((a,b)=> (a.nome||"").localeCompare(b.nome||""));
-
-          categorias[cat].forEach(place => {
-            if (place.marker) place.marker.addTo(map);
-
-            const pDiv = document.createElement("div");
-            pDiv.classList.add("place");
-            const label = document.createElement("div");
-            label.classList.add("place-label");
-            label.textContent = place.nome;
-            pDiv.appendChild(label);
-
-            pDiv.onclick = () => {
-              focusOnPlace(place);
-              if (window.innerWidth < 768) toggleSidebar();
-            };
-
-            if (isCompleted(place)) pDiv.classList.add("completed");
-
-            catDiv.appendChild(pDiv);
-          });
-          placesDiv.appendChild(catDiv);
-        });
-      }
-    }
-
-    function focusOnPlace(place) {
-      map.setView(place.coords, 16);
-      if (place.marker) place.marker.openPopup();
-
-      if (userMarker) {
-        if (routingControl) map.removeControl(routingControl);
-        routingControl = L.Routing.control({
-          waypoints: [ userMarker.getLatLng(), L.latLng(place.coords) ],
-          createMarker: () => null,
-          routeWhileDragging: false
-        }).addTo(map);
-      }
-    }
-
-    // Sidebar (mobile)
-    const sidebar = document.getElementById("sidebar");
-    document.getElementById("toggleSidebar").addEventListener("click", toggleSidebar);
-    function toggleSidebar() { sidebar.classList.toggle("open"); }
+    const sidebar=document.getElementById("sidebar");
+    document.getElementById("toggleSidebar").onclick=()=>sidebar.classList.toggle("open");
   </script>
 </body>
 </html>
