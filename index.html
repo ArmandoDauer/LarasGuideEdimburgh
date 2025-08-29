@@ -160,9 +160,8 @@
   <div id="menu">
     <button onclick="showView('home')" id="btn-home" class="active">Home</button>
     <button onclick="showView('perto')" id="btn-perto">Perto de Mim</button>
-    <button onclick="showView('dia1')" id="btn-dia1">Com Armando</button>
-    <button onclick="showView('dia2')" id="btn-dia2">Bath</button>
-
+    <button onclick="showView('armando')" id="btn-armando">Com Armando</button>
+    <button onclick="showView('bath')" id="btn-bath">Bath</button>
   </div>
 
   <script>
@@ -234,17 +233,30 @@
       }
     };
 
-    function showView(v){ currentView=v; document.querySelectorAll("#menu button").forEach(b=>b.classList.remove("active"));
-      const btn=document.getElementById("btn-"+v); if(btn) btn.classList.add("active"); updateSidebar(); }
+    function showView(v){
+      currentView=v;
+      document.querySelectorAll("#menu button").forEach(b=>b.classList.remove("active"));
+      const btn=document.getElementById("btn-"+v); if(btn) btn.classList.add("active");
+      updateSidebar();
+      if(window.innerWidth<768) sidebar.classList.add('open'); // abre a lista como no "Perto de Mim"
+    }
 
     function updateSidebar(){
       const div=document.getElementById("places"); div.innerHTML="";
       locais.forEach(l=>{if(l.marker) map.removeLayer(l.marker);});
       let list=[]; let tit="Locais";
+
       if(currentView==="home"){ list=locais; tit="Todos"; }
       else if(currentView==="perto"&&userMarker){ list=locais.filter(l=>map.distance(userMarker.getLatLng(),l.coords)<=500); tit="Até 500m"; }
-      else if(["Armando","Bath"].includes(currentView)){ list=locais.filter(l=>l.dia===currentView); list.sort((a,b)=>(a.ordem||a._rowIndex)-(b.ordem||b._rowIndex)); tit="Roteiro "+currentView.replace("dia","Dia "); }
+      else if(currentView==="perto"&&!userMarker){ list=[]; tit="Perto de Mim"; }
+      else if(["armando","bath"].includes(currentView)){
+        list=locais.filter(l=>l.dia===currentView);
+        list.sort((a,b)=>(a.ordem||a._rowIndex)-(b.ordem||b._rowIndex));
+        tit = currentView==='armando' ? 'Com Armando' : 'Bath';
+      }
+
       document.getElementById("sidebar-title").innerText=tit;
+
       list.forEach(p=>{ if(p.marker) p.marker.addTo(map);
         const row=document.createElement("div"); row.className="place";
         const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=isCompleted(p);
@@ -254,6 +266,8 @@
         row.onclick=e=>{ if(e.target.tagName==="INPUT")return; map.setView(p.coords,16); if(p.marker) p.marker.openPopup(); if(window.innerWidth<768) toggleSidebar(); };
         div.appendChild(row);
       });
+
+      // Quando a lista está vazia, deixa o mapa sem marcadores (além do usuário) — comportamento igual ao "Perto de Mim" sem posição
     }
 
     const sidebar=document.getElementById("sidebar");
