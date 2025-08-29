@@ -143,6 +143,26 @@
       #toggleSidebar { display: none; }
       #excelNotice { top: 10px; }
     }
+  
+    /* Previsão do tempo (badge ao lado do +/− do mapa) */
+    #weatherControl {
+      background: rgba(255,255,255,.92);
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      padding: 4px 8px;
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      line-height: 1;
+      box-shadow: 0 1px 3px rgba(0,0,0,.15);
+      user-select: none;
+      cursor: default;
+    }
+    #weatherControl .wx-emoji { font-size: 16px; }
+    #weatherControl .wx-temps b { font-weight: 700; }
+    /* posiciona lateralmente ao controle de zoom do Leaflet */
+    .leaflet-top.leaflet-left #weatherControl { margin-left: 46px; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -167,6 +187,50 @@
   <script>
     const map = L.map('map').setView([55.9533, -3.1883], 14);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
+
+    // --- Previsão do tempo (Edimburgo) ---
+    const WEATHER_COORDS = { lat: 55.9533, lon: -3.1883 };
+    const WeatherControl = L.Control.extend({
+      options: { position: 'topleft' },
+      onAdd: function(){
+        const div = L.DomUtil.create('div');
+        div.id = 'weatherControl';
+        div.title = 'Previsão de hoje em Edimburgo';
+        div.innerHTML = '<span class="wx-emoji">⛅</span><span class="wx-temps"><b>--°C</b>/<span>--°C</span></span>';
+        L.DomEvent.disableClickPropagation(div);
+        return div;
+      }
+    });
+    map.addControl(new WeatherControl());
+
+    function weatherIconFor(code){
+      if(code===0) return '☀️';
+      if(code===1 || code===2) return '🌤️';
+      if(code===3) return '☁️';
+      if(code===45 || code===48) return '🌫️';
+      if([51,53,55,56,57].includes(code)) return '🌦️';
+      if([61,63,65,66,67,80,81,82].includes(code)) return '🌧️';
+      if([71,73,75,77,85,86].includes(code)) return '🌨️';
+      if([95,96,99].includes(code)) return '⛈️';
+      return '⛅';
+    }
+
+    async function fetchWeather(){
+      try{
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${WEATHER_COORDS.lat}&longitude=${WEATHER_COORDS.lon}&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=Europe%2FLondon&forecast_days=1`;
+        const resp = await fetch(url, { cache: 'no-store' });
+        const j = await resp.json();
+        const max = j?.daily?.temperature_2m_max?.[0];
+        const min = j?.daily?.temperature_2m_min?.[0];
+        const code = j?.daily?.weathercode?.[0];
+        const el = document.getElementById('weatherControl');
+        if(el && max != null && min != null){
+          const emoji = weatherIconFor(code);
+          el.innerHTML = `<span class="wx-emoji">${emoji}</span><span class="wx-temps"><b>${Math.round(max)}°C</b>/<span>${Math.round(min)}°C</span></span>`;
+        }
+      }catch(e){ /* silencia falhas */ }
+    }
+    fetchWeather();
 
     let userMarker;
     let currentView = "home";
