@@ -243,7 +243,7 @@
       let list=[]; let tit="Locais";
       if(currentView==="home"){ list=locais; tit="Todos"; }
       else if(currentView==="perto"&&userMarker){ list=locais.filter(l=>map.distance(userMarker.getLatLng(),l.coords)<=500); tit="Até 500m"; }
-      else if(["dia1","dia2","dia3"].includes(currentView)){ list=locais.filter(l=>l.dia===currentView); list.sort((a,b)=>(a.ordem||a._rowIndex)-(b.ordem||b._rowIndex)); tit="Roteiro "+currentView.replace("dia","Dia "); }
+      else if(["Armando","Bath"].includes(currentView)){ list=locais.filter(l=>l.dia===currentView); list.sort((a,b)=>(a.ordem||a._rowIndex)-(b.ordem||b._rowIndex)); tit="Roteiro "+currentView.replace("dia","Dia "); }
       document.getElementById("sidebar-title").innerText=tit;
       list.forEach(p=>{ if(p.marker) p.marker.addTo(map);
         const row=document.createElement("div"); row.className="place";
