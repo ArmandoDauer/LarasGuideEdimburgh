@@ -185,6 +185,8 @@
   </div>
 
   <script>
+    // Ícone do usuário (coloque o arquivo user-icon.png na mesma pasta do index.html)
+    const USER_ICON_URL = 'user-icon.png';
     const map = L.map('map').setView([55.9533, -3.1883], 14);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
 
@@ -283,7 +285,7 @@
       navigator.geolocation.getCurrentPosition(p=>{
         const c=[p.coords.latitude,p.coords.longitude];
         map.setView(c,15);
-        userMarker=L.marker(c,{icon:L.icon({iconUrl:"https://cdn-icons-png.flaticon.com/512/149/149071.png",iconSize:[30,30]})})
+        userMarker=L.marker(c,{icon:L.icon({iconUrl:USER_ICON_URL,iconSize:[44,44]})})
           .addTo(map).bindPopup("Você está aqui");
         fetchWeather({ lat: c[0], lon: c[1] });
         updateSidebar();
