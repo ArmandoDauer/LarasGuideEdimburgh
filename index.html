@@ -92,22 +92,34 @@
       box-shadow: 0 2px 6px rgba(0,0,0,0.25);
     }
 
-    /* Barra de botões inferior */
+    /* Barra de botões inferior - agora com grupos/categorias */
     #menu {
-      display: flex;
-      justify-content: space-around;
       background: var(--bg);
       border-top: 1px solid var(--borda);
-      padding: 8px;
+      padding: 8px 10px;
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
       z-index: 1000;
     }
+    #menu .menu-group { margin-bottom: 8px; }
+    #menu .menu-group:last-child { margin-bottom: 0; }
+    #menu .menu-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin: 0 2px 6px;
+    }
+    #menu .menu-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+    }
     #menu button {
       flex: 1;
-      margin: 0 5px;
       padding: 10px;
       border: 1px solid #ccc;
       border-radius: 8px;
@@ -136,33 +148,17 @@
       font-size: 14px;
     }
 
+    /* Melhor layout no desktop */
     @media (min-width: 768px) {
       body { flex-direction: row; }
       #map { flex: 3; }
       #sidebar { position: static; width: 320px; max-width: none; border-left: 1px solid var(--borda); transition: none; }
       #toggleSidebar { display: none; }
       #excelNotice { top: 10px; }
+
+      #menu { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; }
+      #menu .menu-group { margin-bottom: 0; }
     }
-  
-    /* Previsão do tempo (badge ao lado do +/− do mapa) */
-    #weatherControl {
-      background: rgba(255,255,255,.92);
-      border: 1px solid var(--borda);
-      border-radius: 8px;
-      padding: 4px 8px;
-      font-size: 12px;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      line-height: 1;
-      box-shadow: 0 1px 3px rgba(0,0,0,.15);
-      user-select: none;
-      cursor: default;
-    }
-    #weatherControl .wx-emoji { font-size: 16px; }
-    #weatherControl .wx-temps b { font-weight: 700; }
-    /* posiciona lateralmente ao controle de zoom do Leaflet */
-    .leaflet-top.leaflet-left #weatherControl { margin-left: 46px; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -177,60 +173,29 @@
     <div id="places"></div>
   </div>
 
+  <!-- MENU COM CATEGORIAS -->
   <div id="menu">
-    <button onclick="showView('home')" id="btn-home" class="active">Home</button>
-    <button onclick="showView('perto')" id="btn-perto">Perto de Mim</button>
-    <button onclick="showView('armando')" id="btn-armando">Com Armando</button>
-    <button onclick="showView('bath')" id="btn-bath">Bath</button>
+    <div class="menu-group" aria-label="Explorar">
+      <div class="menu-title">Explorar</div>
+      <div class="menu-buttons">
+        <button onclick="showView('home')" id="btn-home" class="active">Home</button>
+        <button onclick="showView('perto')" id="btn-perto">Perto de Mim</button>
+      </div>
+    </div>
+
+    <div class="menu-group" aria-label="Roteiros">
+      <div class="menu-title">Roteiros</div>
+      <div class="menu-buttons">
+        <button onclick="showView('dia1')" id="btn-dia1">Dia 1</button>
+        <button onclick="showView('dia2')" id="btn-dia2">Dia 2</button>
+        <button onclick="showView('dia3')" id="btn-dia3">Dia 3</button>
+      </div>
+    </div>
   </div>
 
   <script>
     const map = L.map('map').setView([55.9533, -3.1883], 14);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
-
-    // --- Previsão do tempo (Edimburgo) ---
-    const WEATHER_COORDS = { lat: 55.9533, lon: -3.1883 };
-    const WeatherControl = L.Control.extend({
-      options: { position: 'topleft' },
-      onAdd: function(){
-        const div = L.DomUtil.create('div');
-        div.id = 'weatherControl';
-        div.title = 'Previsão de hoje em Edimburgo';
-        div.innerHTML = '<span class="wx-emoji">⛅</span><span class="wx-temps"><b>--°C</b>/<span>--°C</span></span>';
-        L.DomEvent.disableClickPropagation(div);
-        return div;
-      }
-    });
-    map.addControl(new WeatherControl());
-
-    function weatherIconFor(code){
-      if(code===0) return '☀️';
-      if(code===1 || code===2) return '🌤️';
-      if(code===3) return '☁️';
-      if(code===45 || code===48) return '🌫️';
-      if([51,53,55,56,57].includes(code)) return '🌦️';
-      if([61,63,65,66,67,80,81,82].includes(code)) return '🌧️';
-      if([71,73,75,77,85,86].includes(code)) return '🌨️';
-      if([95,96,99].includes(code)) return '⛈️';
-      return '⛅';
-    }
-
-    async function fetchWeather(){
-      try{
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${WEATHER_COORDS.lat}&longitude=${WEATHER_COORDS.lon}&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=Europe%2FLondon&forecast_days=1`;
-        const resp = await fetch(url, { cache: 'no-store' });
-        const j = await resp.json();
-        const max = j?.daily?.temperature_2m_max?.[0];
-        const min = j?.daily?.temperature_2m_min?.[0];
-        const code = j?.daily?.weathercode?.[0];
-        const el = document.getElementById('weatherControl');
-        if(el && max != null && min != null){
-          const emoji = weatherIconFor(code);
-          el.innerHTML = `<span class="wx-emoji">${emoji}</span><span class="wx-temps"><b>${Math.round(max)}°C</b>/<span>${Math.round(min)}°C</span></span>`;
-        }
-      }catch(e){ /* silencia falhas */ }
-    }
-    fetchWeather();
 
     let userMarker;
     let currentView = "home";
@@ -297,41 +262,26 @@
       }
     };
 
-    function showView(v){
-      currentView=v;
-      document.querySelectorAll("#menu button").forEach(b=>b.classList.remove("active"));
-      const btn=document.getElementById("btn-"+v); if(btn) btn.classList.add("active");
-      updateSidebar();
-      if(window.innerWidth<768) sidebar.classList.add('open'); // abre a lista como no "Perto de Mim"
-    }
+    function showView(v){ currentView=v; document.querySelectorAll("#menu button").forEach(b=>b.classList.remove("active"));
+      const btn=document.getElementById("btn-"+v); if(btn) btn.classList.add("active"); updateSidebar(); }
 
     function updateSidebar(){
       const div=document.getElementById("places"); div.innerHTML="";
       locais.forEach(l=>{if(l.marker) map.removeLayer(l.marker);});
       let list=[]; let tit="Locais";
-
       if(currentView==="home"){ list=locais; tit="Todos"; }
       else if(currentView==="perto"&&userMarker){ list=locais.filter(l=>map.distance(userMarker.getLatLng(),l.coords)<=500); tit="Até 500m"; }
-      else if(currentView==="perto"&&!userMarker){ list=[]; tit="Perto de Mim"; }
-      else if(["armando","bath"].includes(currentView)){
-        list=locais.filter(l=>l.dia===currentView);
-        list.sort((a,b)=>(a.ordem||a._rowIndex)-(b.ordem||b._rowIndex));
-        tit = currentView==='armando' ? 'Com Armando' : 'Bath';
-      }
-
+      else if(["dia1","dia2","dia3"].includes(currentView)){ list=locais.filter(l=>l.dia===currentView); list.sort((a,b)=>(a.ordem||a._rowIndex)-(b.ordem||b._rowIndex)); tit="Roteiro "+currentView.replace("dia","Dia "); }
       document.getElementById("sidebar-title").innerText=tit;
-
       list.forEach(p=>{ if(p.marker) p.marker.addTo(map);
         const row=document.createElement("div"); row.className="place";
         const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=isCompleted(p);
         cb.onchange=()=>{ setCompleted(p,cb.checked); row.classList.toggle("completed",cb.checked); };
         const lab=document.createElement("div"); lab.className="place-label"; lab.textContent=p.nome;
         row.append(cb,lab); row.classList.toggle("completed",cb.checked);
-        row.onclick=e=>{ if(e.target.tagName==="INPUT")return; map.setView(p.coords,16); if(p.marker) p.marker.openPopup(); if(window.innerWidth<768) toggleSidebar(); };
+        row.onclick=e=>{ if(e.target.tagName==="INPUT")return; map.setView(p.coords,16); if(p.marker) p.marker.openPopup(); if(window.innerWidth<768) sidebar.classList.remove('open'); };
         div.appendChild(row);
       });
-
-      // Quando a lista está vazia, deixa o mapa sem marcadores (além do usuário) — comportamento igual ao "Perto de Mim" sem posição
     }
 
     const sidebar=document.getElementById("sidebar");
